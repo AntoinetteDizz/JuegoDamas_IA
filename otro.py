@@ -12,6 +12,7 @@ PNEGRAS = (71, 71, 70)      # Color para piezas negras
 GRIS = (169, 169, 169)      # Color gris para el borde
 VERDE = (50, 205, 50)       # Verde para movimientos válidos
 TEXTO_COLOR = (50, 50, 60)  # Color del texto (negro)
+ROJO = (255, 0, 0)  # Color para el borde de la reina
 
 # Inicialización de Pygame
 pygame.init()
@@ -53,12 +54,18 @@ def dibujar_movimientos_disponibles():
 def dibujar_fichas():
     for fila in range(4):
         for columna in range(4):
-            if tablero[fila][columna] == 1:  # Ficha blanca
+            if tablero[fila][columna] == 1 or tablero[fila][columna] == -1:  # Ficha blanca o reina blanca
                 pygame.draw.circle(pantalla, GRIS, (columna * TAMANO_CASILLA + TAMANO_CASILLA // 2, fila * TAMANO_CASILLA + TAMANO_CASILLA // 2), TAMANO_CASILLA // 3 + 3)
                 pygame.draw.circle(pantalla, PBLANCAS, (columna * TAMANO_CASILLA + TAMANO_CASILLA // 2, fila * TAMANO_CASILLA + TAMANO_CASILLA // 2), TAMANO_CASILLA // 3)
-            elif tablero[fila][columna] == 2:  # Ficha negra
+                # Si es reina, dibujar borde rojo
+                if tablero[fila][columna] == -1:
+                    pygame.draw.circle(pantalla, ROJO, (columna * TAMANO_CASILLA + TAMANO_CASILLA // 2, fila * TAMANO_CASILLA + TAMANO_CASILLA // 2), TAMANO_CASILLA // 3 + 6, 3)
+            elif tablero[fila][columna] == 2 or tablero[fila][columna] == -2:  # Ficha negra o reina negra
                 pygame.draw.circle(pantalla, GRIS, (columna * TAMANO_CASILLA + TAMANO_CASILLA // 2, fila * TAMANO_CASILLA + TAMANO_CASILLA // 2), TAMANO_CASILLA // 3 + 3)
                 pygame.draw.circle(pantalla, PNEGRAS, (columna * TAMANO_CASILLA + TAMANO_CASILLA // 2, fila * TAMANO_CASILLA + TAMANO_CASILLA // 2), TAMANO_CASILLA // 3)
+                # Si es reina, dibujar borde rojo
+                if tablero[fila][columna] == -2:
+                    pygame.draw.circle(pantalla, ROJO, (columna * TAMANO_CASILLA + TAMANO_CASILLA // 2, fila * TAMANO_CASILLA + TAMANO_CASILLA // 2), TAMANO_CASILLA // 3 + 6, 3)
 
 # Función para mostrar el turno del jugador
 def mostrar_turno():
@@ -83,11 +90,17 @@ def manejar_eventos():
                     # Mover la pieza
                     tablero[fila][columna] = pieza_seleccionada
                     tablero[posicion_original[0]][posicion_original[1]] = 0
+                    
+                    # Convertir en reina si llegamos al borde del tablero
+                    if (pieza_seleccionada == 1 and fila == 3) or (pieza_seleccionada == 2 and fila == 0):
+                        tablero[fila][columna] = -pieza_seleccionada  # Convertir a reina (negativa para indicar que es reina)
+                    
                     # Eliminar pieza capturada si hay captura
                     if abs(fila - posicion_original[0]) == 2:
                         fila_rival = (fila + posicion_original[0]) // 2
                         columna_rival = (columna + posicion_original[1]) // 2
                         tablero[fila_rival][columna_rival] = 0
+                    
                     pieza_seleccionada = None
                     movimientos_disponibles = []
                     jugador_turno = 2 if jugador_turno == 1 else 1
@@ -95,7 +108,7 @@ def manejar_eventos():
                     tablero[posicion_original[0]][posicion_original[1]] = pieza_seleccionada
                     pieza_seleccionada = None
                     movimientos_disponibles = []
-            elif tablero[fila][columna] == jugador_turno:
+            elif tablero[fila][columna] == jugador_turno or abs(tablero[fila][columna]) == jugador_turno:
                 pieza_seleccionada = tablero[fila][columna]
                 posicion_original = (fila, columna)
                 tablero[fila][columna] = 0
@@ -103,18 +116,38 @@ def manejar_eventos():
 
 # Función para obtener movimientos válidos
 def obtener_movimientos_validos(fila, columna):
-    direcciones = [(-1, -1), (-1, 1), (1, -1), (1, 1)]  # Movimiento diagonal
+    direcciones = []
+
+    # Determinar direcciones válidas según el jugador y si la pieza es reina
+    if pieza_seleccionada == 1:  # Ficha blanca normal
+        direcciones = [(1, -1), (1, 1)]  # Solo hacia adelante (abajo)
+    elif pieza_seleccionada == 2:  # Ficha negra normal
+        direcciones = [(-1, -1), (-1, 1)]  # Solo hacia adelante (arriba)
+    elif pieza_seleccionada == -1 or pieza_seleccionada == -2:  # Reina
+        direcciones = [(-1, -1), (-1, 1), (1, -1), (1, 1)]  # Movimiento en ambas direcciones
+
     movimientos = []
+
+    # Movimiento para piezas normales y reinas
     for df, dc in direcciones:
         f, c = fila + df, columna + dc
         if 0 <= f < 4 and 0 <= c < 4 and tablero[f][c] == 0:
             movimientos.append((f, c))
+
         # Verificar captura
         f_salto, c_salto = fila + 2 * df, columna + 2 * dc
         f_rival, c_rival = fila + df, columna + dc
-        if 0 <= f_salto < 4 and 0 <= c_salto < 4 and tablero[f_rival][c_rival] != 0 and tablero[f_rival][c_rival] != jugador_turno and tablero[f_salto][c_salto] == 0:
+        if (
+            0 <= f_salto < 4 and 0 <= c_salto < 4 and
+            tablero[f_rival][c_rival] != 0 and  # La casilla no está vacía
+            (tablero[f_rival][c_rival] != pieza_seleccionada) and  # No puede comer a su misma pieza
+            abs(tablero[f_rival][c_rival]) != abs(tablero[fila][columna]) and  # La pieza rival debe ser del color opuesto
+            tablero[f_salto][c_salto] == 0  # La casilla de destino debe estar vacía
+        ):
             movimientos.append((f_salto, c_salto))
+
     return movimientos
+
 
 # Función principal del juego
 def main():
